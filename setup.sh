@@ -72,6 +72,7 @@ fi
 
 echo -e "\n${YELLOW}====================================================${NC}"
 echo -e "${GREEN} 🚀 Mobile Web Manager:${NC}  http://${LOCAL_IP}:8085"
+echo -e "${GREEN} 📚 OPDS Catalog URL:${NC}   http://${LOCAL_IP}:8085/opds/"
 echo -e "${GREEN} 📖 KOReader WebDAV URL:${NC} http://${LOCAL_IP}:8085/dav/"
 echo -e "${GREEN} 🔄 KOReader Sync Server:${NC}http://${LOCAL_IP}:8085/"
 echo -e "${YELLOW}====================================================${NC}"

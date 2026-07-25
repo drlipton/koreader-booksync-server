@@ -21,7 +21,7 @@
           </svg>
         </div>
         <div class="logo-text">
-          <h1>BookSync <span>WebDAV</span></h1>
+          <h1>BookSync <span>WebDAV & OPDS</span></h1>
           <span class="status-badge"><span class="pulse-dot"></span> Online</span>
         </div>
       </div>
@@ -32,7 +32,7 @@
             <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
             <line x1="12" y1="18" x2="12.01" y2="18"></line>
           </svg>
-          <span>Connect KOReader</span>
+          <span>Connect Devices</span>
         </button>
 
         <button id="btn-upload" class="btn btn-primary">
@@ -77,7 +77,7 @@
         <div class="stat-icon">🌐</div>
         <div class="stat-info">
           <span class="stat-value ip-text" id="stat-ip">192.168.0.80:8085</span>
-          <span class="stat-label">Server WebDAV Address</span>
+          <span class="stat-label">Server Address</span>
         </div>
       </div>
     </section>
@@ -177,29 +177,65 @@
     </div>
   </div>
 
-  <!-- Modal: KOReader Setup & QR Guide -->
+  <!-- Modal: Device Connection & Guide -->
   <div id="modal-guide" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">
-        <h2>📱 Connect KOReader to Server</h2>
+        <h2>📱 Connect Your e-Readers</h2>
         <button class="btn-close" onclick="closeModal('modal-guide')">&times;</button>
       </div>
       <div class="modal-body">
         <div class="tab-group">
-          <button class="tab-btn active" data-tab="tab-webdav">1. Book Downloads (WebDAV)</button>
-          <button class="tab-btn" data-tab="tab-kosync">2. Reading Position Sync (Kosync)</button>
+          <button class="tab-btn active" data-tab="tab-opds">1. OPDS Catalog (Xteink / Apps)</button>
+          <button class="tab-btn" data-tab="tab-webdav">2. WebDAV Storage (KOReader)</button>
+          <button class="tab-btn" data-tab="tab-kosync">3. Progress Sync (Kosync)</button>
         </div>
 
-        <div id="tab-webdav" class="tab-content active">
-          <p class="guide-intro">Use KOReader's built-in <strong>Cloud Storage</strong> to browse, search, and download your books wirelessly onto your e-reader.</p>
+        <!-- Tab 1: OPDS Catalog -->
+        <div id="tab-opds" class="tab-content active">
+          <p class="guide-intro">Connect your <strong>Xteink device</strong>, e-ink readers, or mobile reader apps (Moon+, Marvin, KOReader) to browse visual book covers, authors, and download books directly.</p>
           
           <div class="qr-container">
             <div id="qr-code-box" class="qr-code-box"></div>
             <div class="qr-info">
-              <span class="qr-label">Scan with Phone / Tablet</span>
-              <span class="qr-sub">Open Web UI directly</span>
+              <span class="qr-label">Scan to Copy Server Address</span>
+              <span class="qr-sub">Use on mobile devices</span>
             </div>
           </div>
+
+          <div class="steps-list">
+            <div class="step">
+              <span class="step-num">1</span>
+              <div>
+                <strong>Open OPDS Catalog on your device</strong>
+                <p>On Xteink / CrossPoint: Open <strong>OPDS Sync / Catalog</strong> menu.</p>
+              </div>
+            </div>
+
+            <div class="step">
+              <span class="step-num">2</span>
+              <div>
+                <strong>Enter OPDS Server URL</strong>
+                <div class="copy-input-group">
+                  <input type="text" id="input-opds-url" readonly value="http://192.168.0.80:8085/opds/">
+                  <button class="btn btn-secondary btn-sm" onclick="copyValue('input-opds-url')">Copy OPDS URL</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <span class="step-num">3</span>
+              <div>
+                <strong>Browse & Download</strong>
+                <p>No password needed! Tap any book to view cover art and download wirelessly.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tab 2: WebDAV Storage -->
+        <div id="tab-webdav" class="tab-content">
+          <p class="guide-intro">Use KOReader's built-in <strong>Cloud Storage</strong> to browse, search, and download your books wirelessly onto your e-reader.</p>
 
           <div class="steps-list">
             <div class="step">
@@ -213,9 +249,9 @@
             <div class="step">
               <span class="step-num">2</span>
               <div>
-                <strong>Enter Server Details</strong>
+                <strong>Enter WebDAV Server URL</strong>
                 <div class="copy-input-group">
-                  <input type="text" id="input-dav-url" readonly value="http://192.168.0.80:8080/dav/">
+                  <input type="text" id="input-dav-url" readonly value="http://192.168.0.80:8085/dav/">
                   <button class="btn btn-secondary btn-sm" onclick="copyValue('input-dav-url')">Copy URL</button>
                 </div>
               </div>
@@ -224,15 +260,16 @@
             <div class="step">
               <span class="step-num">3</span>
               <div>
-                <strong>Credentials</strong>
-                <p>No password required by default! (If enabled in settings: User <code>koreader</code> / Pass <code>books123</code>)</p>
+                <strong>Credentials & Path</strong>
+                <p>Start folder: <code>/</code>. Username: <code>koreader</code> / Pass: <code>books123</code> (or leave blank).</p>
               </div>
             </div>
           </div>
         </div>
 
+        <!-- Tab 3: Kosync Reading Position -->
         <div id="tab-kosync" class="tab-content">
-          <p class="guide-intro">Sync your current reading page and percentage across your Kindle, Kobo, Android device, or PC seamlessly!</p>
+          <p class="guide-intro">Sync your current reading page and percentage across your Kindle, Kobo, Xteink, Android device, or PC seamlessly!</p>
 
           <div class="steps-list">
             <div class="step">
@@ -248,7 +285,7 @@
               <div>
                 <strong>Set Sync Server URL</strong>
                 <div class="copy-input-group">
-                  <input type="text" id="input-kosync-url" readonly value="http://192.168.0.80:8080/">
+                  <input type="text" id="input-kosync-url" readonly value="http://192.168.0.80:8085/">
                   <button class="btn btn-secondary btn-sm" onclick="copyValue('input-kosync-url')">Copy URL</button>
                 </div>
               </div>
@@ -258,7 +295,7 @@
               <span class="step-num">3</span>
               <div>
                 <strong>Log In / Register in KOReader</strong>
-                <p>Tap <strong>Create account</strong> or <strong>Log in</strong> in KOReader. Enter any username & password to register your device!</p>
+                <p>Tap <strong>Create account</strong> or <strong>Log in</strong> in KOReader. Enter username <code>joel</code> to sync all your e-readers!</p>
               </div>
             </div>
           </div>

@@ -30,7 +30,7 @@ function initEventListeners() {
   
   document.getElementById('btn-koreader-guide').addEventListener('click', () => {
     openModal('modal-guide');
-    generateQrCode(`http://${serverIp}:${serverPort}/dav/`);
+    generateQrCode(`http://${serverIp}:${serverPort}/opds/`);
   });
 
   document.getElementById('btn-mkdir').addEventListener('click', () => openModal('modal-mkdir'));
@@ -67,7 +67,7 @@ async function loadStats() {
     const res = await fetch('/api/stats');
     const data = await res.json();
     serverIp = data.serverIp || window.location.hostname;
-    serverPort = data.port || 8080;
+    serverPort = data.port || 8085;
 
     document.getElementById('stat-books').textContent = data.totalBooks || 0;
     document.getElementById('stat-storage').textContent = data.formattedTotalSize || '0 MB';
@@ -75,9 +75,11 @@ async function loadStats() {
 
     const davUrl = `http://${serverIp}:${serverPort}/dav/`;
     const kosyncUrl = `http://${serverIp}:${serverPort}/`;
+    const opdsUrl = `http://${serverIp}:${serverPort}/opds/`;
 
     document.getElementById('input-dav-url').value = davUrl;
     document.getElementById('input-kosync-url').value = kosyncUrl;
+    document.getElementById('input-opds-url').value = opdsUrl;
   } catch (e) {
     console.error('Error loading stats:', e);
   }

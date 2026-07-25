@@ -7,6 +7,7 @@ const multer = require('multer');
 const { v2: webdav } = require('webdav-server');
 const { parseEpub } = require('./epub-helper');
 const { handleKosyncRoutes } = require('./kosync');
+const { handleOpdsRoutes } = require('./opds');
 
 const PORT = process.env.PORT || 8085;
 const BOOKS_DIR = path.join(__dirname, '..', 'data', 'books');
@@ -124,6 +125,9 @@ app.use(express.urlencoded({ extended: true }));
 
 // Setup Kosync Routes (KOReader Progress Sync)
 handleKosyncRoutes(app);
+
+// Setup OPDS Catalog Routes (Open Publication Distribution System)
+handleOpdsRoutes(app);
 
 // File Upload configuration using Multer
 const storage = multer.diskStorage({
@@ -487,6 +491,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(` KOReader BookSync & WebDAV Server Started!`);
   console.log(` Mobile Web Manager: http://${ips[0]}:${PORT}`);
   console.log(` KOReader WebDAV URL: http://${ips[0]}:${PORT}/dav/`);
+  console.log(` OPDS Catalog URL:   http://${ips[0]}:${PORT}/opds/`);
   console.log(` KOReader Sync Server: http://${ips[0]}:${PORT}/`);
   console.log(` Storage Path:        ${BOOKS_DIR}`);
   console.log(`====================================================`);

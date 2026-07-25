@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KOReader BookSync & WebDAV Server</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation Header -->
+    <header class="main-header">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+            <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1>BookSync <span>WebDAV</span></h1>
+          <span class="status-badge"><span class="pulse-dot"></span> Online</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-koreader-guide" class="btn btn-secondary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+            <line x1="12" y1="18" x2="12.01" y2="18"></line>
+          </svg>
+          <span>Connect KOReader</span>
+        </button>
+
+        <button id="btn-upload" class="btn btn-primary">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span>Upload Books</span>
+        </button>
+        <input type="file" id="file-input" multiple accept=".epub,.pdf,.mobi,.azw3,.cbz,.cbr,.txt,.fb2" style="display: none;">
+      </div>
+    </header>
+
+    <!-- System Stats & Quick Info Bar -->
+    <section class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-icon">📚</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-books">0</span>
+          <span class="stat-label">Total Books</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon">💾</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-storage">0 MB</span>
+          <span class="stat-label">Storage Used</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-icon">🔄</div>
+        <div class="stat-info">
+          <span class="stat-value" id="stat-syncs">0</span>
+          <span class="stat-label">Synced Progress</span>
+        </div>
+      </div>
+
+      <div class="stat-card server-ip-card" id="server-ip-box">
+        <div class="stat-icon">🌐</div>
+        <div class="stat-info">
+          <span class="stat-value ip-text" id="stat-ip">192.168.0.80:8085</span>
+          <span class="stat-label">Server WebDAV Address</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Toolbar: Search, Filters, Folders & View Mode -->
+    <section class="toolbar">
+      <div class="breadcrumb-container">
+        <button id="btn-home" class="breadcrumb-item home-btn" title="Root Directory">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          </svg>
+        </button>
+        <div id="breadcrumb-list" class="breadcrumb-list">
+          <span class="crumb active">/</span>
+        </div>
+      </div>
+
+      <div class="toolbar-right">
+        <div class="search-box">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input type="text" id="search-input" placeholder="Search books, authors, files...">
+        </div>
+
+        <button id="btn-mkdir" class="btn btn-secondary btn-icon-only" title="New Folder">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            <line x1="12" y1="11" x2="12" y2="17"></line>
+            <line x1="9" y1="14" x2="15" y2="14"></line>
+          </svg>
+        </button>
+
+        <div class="view-toggle">
+          <button id="btn-view-grid" class="toggle-btn active" title="Grid View">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="3" width="7" height="7"></rect>
+              <rect x="14" y="3" width="7" height="7"></rect>
+              <rect x="14" y="14" width="7" height="7"></rect>
+              <rect x="3" y="14" width="7" height="7"></rect>
+            </svg>
+          </button>
+          <button id="btn-view-list" class="toggle-btn" title="List View">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6"></line>
+              <line x1="8" y1="12" x2="21" y2="12"></line>
+              <line x1="8" y1="18" x2="21" y2="18"></line>
+              <line x1="3" y1="6" x2="3.01" y2="6"></line>
+              <line x1="3" y1="12" x2="3.01" y2="12"></line>
+              <line x1="3" y1="18" x2="3.01" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Content Area: Book & Folder Grid -->
+    <main class="content-area">
+      <!-- Format Filter Tags -->
+      <div class="filter-chips">
+        <button class="chip active" data-filter="all">All Files</button>
+        <button class="chip" data-filter=".epub">EPUB</button>
+        <button class="chip" data-filter=".pdf">PDF</button>
+        <button class="chip" data-filter=".mobi,.azw3">MOBI / AZW3</button>
+        <button class="chip" data-filter=".cbz,.cbr">Comics (CBZ)</button>
+        <button class="chip" data-filter="folder">Folders</button>
+      </div>
+
+      <!-- File Grid / List Container -->
+      <div id="file-grid" class="file-grid grid-mode">
+        <div class="loading-spinner">
+          <div class="spinner"></div>
+          <span>Loading library...</span>
+        </div>
+      </div>
+    </main>
+
+    <!-- Reading Progress Sync Activity Drawer / Panel -->
+    <section class="progress-section">
+      <div class="section-title">
+        <h2>🔄 KOReader Reading Progress Sync (Kosync)</h2>
+        <span class="sub-title">Live synced books across your e-readers</span>
+      </div>
+      <div id="kosync-list" class="kosync-list">
+        <div class="empty-sync">No progress sync records yet. Open a book in KOReader with Progress Sync enabled to see live updates!</div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Drag and Drop Overlay -->
+  <div id="drop-zone" class="drop-overlay">
+    <div class="drop-card">
+      <div class="drop-icon">📥</div>
+      <h3>Drop books here to upload</h3>
+      <p>Supports EPUB, PDF, MOBI, AZW3, CBZ, and more</p>
+    </div>
+  </div>
+
+  <!-- Modal: KOReader Setup & QR Guide -->
+  <div id="modal-guide" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>📱 Connect KOReader to Server</h2>
+        <button class="btn-close" onclick="closeModal('modal-guide')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="tab-group">
+          <button class="tab-btn active" data-tab="tab-webdav">1. Book Downloads (WebDAV)</button>
+          <button class="tab-btn" data-tab="tab-kosync">2. Reading Position Sync (Kosync)</button>
+        </div>
+
+        <div id="tab-webdav" class="tab-content active">
+          <p class="guide-intro">Use KOReader's built-in <strong>Cloud Storage</strong> to browse, search, and download your books wirelessly onto your e-reader.</p>
+          
+          <div class="qr-container">
+            <div id="qr-code-box" class="qr-code-box"></div>
+            <div class="qr-info">
+              <span class="qr-label">Scan with Phone / Tablet</span>
+              <span class="qr-sub">Open Web UI directly</span>
+            </div>
+          </div>
+
+          <div class="steps-list">
+            <div class="step">
+              <span class="step-num">1</span>
+              <div>
+                <strong>Open KOReader on your e-Reader</strong>
+                <p>Tap top menu -> <strong>Cloud Storage</strong> -> <strong>Add new cloud storage</strong> -> Choose <strong>WebDAV</strong>.</p>
+              </div>
+            </div>
+
+            <div class="step">
+              <span class="step-num">2</span>
+              <div>
+                <strong>Enter Server Details</strong>
+                <div class="copy-input-group">
+                  <input type="text" id="input-dav-url" readonly value="http://192.168.0.80:8080/dav/">
+                  <button class="btn btn-secondary btn-sm" onclick="copyValue('input-dav-url')">Copy URL</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <span class="step-num">3</span>
+              <div>
+                <strong>Credentials</strong>
+                <p>No password required by default! (If enabled in settings: User <code>koreader</code> / Pass <code>books123</code>)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="tab-kosync" class="tab-content">
+          <p class="guide-intro">Sync your current reading page and percentage across your Kindle, Kobo, Android device, or PC seamlessly!</p>
+
+          <div class="steps-list">
+            <div class="step">
+              <span class="step-num">1</span>
+              <div>
+                <strong>Open KOReader Progress Sync</strong>
+                <p>Tap top menu -> <strong>Settings (gear icon)</strong> -> <strong>Progress sync</strong> -> <strong>Custom sync server</strong>.</p>
+              </div>
+            </div>
+
+            <div class="step">
+              <span class="step-num">2</span>
+              <div>
+                <strong>Set Sync Server URL</strong>
+                <div class="copy-input-group">
+                  <input type="text" id="input-kosync-url" readonly value="http://192.168.0.80:8080/">
+                  <button class="btn btn-secondary btn-sm" onclick="copyValue('input-kosync-url')">Copy URL</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="step">
+              <span class="step-num">3</span>
+              <div>
+                <strong>Log In / Register in KOReader</strong>
+                <p>Tap <strong>Create account</strong> or <strong>Log in</strong> in KOReader. Enter any username & password to register your device!</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: New Folder -->
+  <div id="modal-mkdir" class="modal-overlay">
+    <div class="modal-card modal-sm">
+      <div class="modal-header">
+        <h2>📁 Create New Folder</h2>
+        <button class="btn-close" onclick="closeModal('modal-mkdir')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label for="input-mkdir-name">Folder Name</label>
+        <input type="text" id="input-mkdir-name" class="input-text" placeholder="e.g. Science Fiction, Classics, Comics">
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal('modal-mkdir')">Cancel</button>
+          <button id="btn-submit-mkdir" class="btn btn-primary">Create Folder</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Rename -->
+  <div id="modal-rename" class="modal-overlay">
+    <div class="modal-card modal-sm">
+      <div class="modal-header">
+        <h2>✏️ Rename Item</h2>
+        <button class="btn-close" onclick="closeModal('modal-rename')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="rename-old-path">
+        <label for="input-rename-name">New Name</label>
+        <input type="text" id="input-rename-name" class="input-text">
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal('modal-rename')">Cancel</button>
+          <button id="btn-submit-rename" class="btn btn-primary">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

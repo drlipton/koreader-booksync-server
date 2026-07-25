@@ -1,0 +1,21 @@
+{
+  "name": "koreader-sync-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "adm-zip": "^0.6.0",
+    "epub-parser": "^0.2.5",
+    "express": "^5.2.1",
+    "mime-types": "^3.0.2",
+    "multer": "^2.2.0",
+    "webdav-server": "^2.6.2"
+  }
+}

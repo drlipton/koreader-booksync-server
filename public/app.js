@@ -390,7 +390,7 @@ async function submitRename() {
   }
 }
 
-// Kosync Reading Progress Summary (Grouped BY BOOK)
+// Kosync Reading Progress Summary (Grouped BY BOOK - Expandable/Collapsible Accordion)
 async function loadKosyncSummary() {
   try {
     const res = await fetch('/api/kosync/summary');
@@ -405,7 +405,7 @@ async function loadKosyncSummary() {
     }
 
     container.innerHTML = '';
-    data.books.forEach(book => {
+    data.books.forEach((book, index) => {
       const card = document.createElement('div');
       card.className = 'book-sync-card';
       const percent = Math.round((book.latestPercentage || 0) * 100);
@@ -417,39 +417,73 @@ async function loadKosyncSummary() {
         coverHtml = `<div class="sync-book-icon">📖</div>`;
       }
 
-      const devicesHtml = book.devices.map(d => {
+      const devicesRowsHtml = book.devices.map(d => {
         const devPercent = Math.round((d.percentage || 0) * 100);
+        const timeAgo = formatTimeAgo(d.updatedAt || d.timestamp * 1000);
         return `
-          <div class="device-pill">
-            <span class="device-name">📱 ${escapeHtml(d.device)}</span>
-            <span class="device-user">(${escapeHtml(d.user)})</span>
-            <span class="device-percent">${devPercent}%</span>
+          <div class="sync-device-row">
+            <div class="dev-info">
+              <span class="dev-icon">📱</span>
+              <span class="dev-name">${escapeHtml(d.device)}</span>
+              <span class="dev-user">(${escapeHtml(d.user)})</span>
+            </div>
+            <div class="dev-bar-container">
+              <div class="dev-progress-bar">
+                <div class="dev-progress-fill" style="width: ${devPercent}%"></div>
+              </div>
+              <span class="dev-percent">${devPercent}%</span>
+            </div>
+            <span class="dev-time">${timeAgo}</span>
           </div>
         `;
       }).join('');
 
+      const isExpanded = index === 0;
+
       card.innerHTML = `
-        <div class="sync-book-header">
+        <div class="sync-book-header" onclick="toggleAccordion(this)">
           ${coverHtml}
           <div class="sync-book-info">
             <div class="sync-book-title">${escapeHtml(book.bookTitle)}</div>
-            <div class="sync-book-author">${escapeHtml(book.bookAuthor || 'KOReader Sync')}</div>
+            <div class="sync-book-author">${escapeHtml(book.bookAuthor)}</div>
           </div>
-          <div class="sync-book-badge">${percent}% Read</div>
+          <div class="sync-header-right">
+            <span class="sync-book-badge">${percent}% Read</span>
+            <span class="device-count-pill">${book.devices.length} Device${book.devices.length === 1 ? '' : 's'}</span>
+            <span class="chevron-icon ${isExpanded ? 'active' : ''}">▼</span>
+          </div>
         </div>
 
-        <div class="sync-progress-bar">
-          <div class="sync-progress-fill" style="width: ${percent}%"></div>
-        </div>
-
-        <div class="sync-devices-list">
-          <span class="devices-label">Synced Devices:</span>
-          ${devicesHtml}
+        <div class="sync-card-body ${isExpanded ? '' : 'collapsed'}">
+          <div class="sync-overall-bar">
+            <div class="sync-progress-fill" style="width: ${percent}%"></div>
+          </div>
+          <div class="sync-devices-table">
+            ${devicesRowsHtml}
+          </div>
         </div>
       `;
       container.appendChild(card);
     });
   } catch (e) {}
+}
+
+function toggleAccordion(headerEl) {
+  const cardBody = headerEl.nextElementSibling;
+  const chevron = headerEl.querySelector('.chevron-icon');
+  if (cardBody) {
+    cardBody.classList.toggle('collapsed');
+    chevron.classList.toggle('active');
+  }
+}
+
+function formatTimeAgo(dateOrMs) {
+  const timestamp = typeof dateOrMs === 'number' ? dateOrMs : new Date(dateOrMs).getTime();
+  const diffSec = Math.floor((Date.now() - timestamp) / 1000);
+  if (diffSec < 60) return 'Just now';
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
 }
 
 // Modal Helpers
@@ -527,7 +561,7 @@ function generateQrCode(text) {
 
         <!-- Outer Frame Position Pattern BL -->
         <rect x="10" y="66" width="24" height="24" fill="#000" />
-        <rect x="13" y="69" width="18" height="18" fill="#fff" />
+        <rect x="13" y="69" width="13" height="18" fill="#fff" />
         <rect x="16" y="72" width="12" height="12" fill="#000" />
 
         <!-- Data Matrix Mock Pattern -->

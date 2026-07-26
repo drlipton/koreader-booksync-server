@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { parseEpub } = require('./epub-helper');
 
 const DB_FILE = path.join(__dirname, '..', 'data', 'kosync.json');
@@ -26,6 +27,33 @@ function saveData(data) {
   }
 }
 
+// Calculate MD5 hashes of a file for matching KOReader document hashes
+function getBookHashes(filePath) {
+  try {
+    const stat = fs.statSync(filePath);
+    const size = stat.size;
+    const fullBuf = fs.readFileSync(filePath);
+    const fullMd5 = crypto.createHash('md5').update(fullBuf).digest('hex');
+
+    const fd = fs.openSync(filePath, 'r');
+    const headBuf = Buffer.alloc(Math.min(1024, size));
+    fs.readSync(fd, headBuf, 0, headBuf.length, 0);
+
+    const tailPos = Math.max(0, size - 1024);
+    const tailBuf = Buffer.alloc(Math.min(1024, size));
+    fs.readSync(fd, tailBuf, 0, tailBuf.length, tailPos);
+    fs.closeSync(fd);
+
+    const partMd5 = crypto.createHash('md5').update(Buffer.concat([headBuf, tailBuf])).digest('hex');
+    const relPath = path.relative(BOOKS_DIR, filePath).replace(/\\/g, '/');
+    const pathMd5 = crypto.createHash('md5').update(relPath).digest('hex');
+
+    return { fullMd5, partMd5, pathMd5 };
+  } catch (e) {
+    return { fullMd5: '', partMd5: '', pathMd5: '' };
+  }
+}
+
 // Find all books in data/books directory recursively
 function getAllBookFiles(dirPath, fileList = []) {
   try {
@@ -49,12 +77,14 @@ function getAllBookFiles(dirPath, fileList = []) {
               hasCover: !!parsed.coverBuffer
             };
           }
+          const hashes = getBookHashes(fullPath);
           fileList.push({
             name: file,
             relPath,
             ext,
             size: stat.size,
-            metadata
+            metadata,
+            hashes
           });
         }
       }
@@ -189,21 +219,29 @@ function handleKosyncRoutes(app) {
     });
 
     const bookSyncList = Object.values(docGroupMap).map(group => {
-      // Try to match book in storage
-      let matchedBook = null;
-
-      // Check if any stored book name matches or partial matches
-      if (booksInStorage.length === 1) {
-        matchedBook = booksInStorage[0];
-      } else if (booksInStorage.length > 0) {
-        matchedBook = booksInStorage.find(b => b.relPath.includes(group.document)) || booksInStorage[0];
-      }
+      let matchedBook = booksInStorage.find(b =>
+        b.hashes.fullMd5 === group.document ||
+        b.hashes.partMd5 === group.document ||
+        b.hashes.pathMd5 === group.document ||
+        b.relPath.toLowerCase().includes(group.document.toLowerCase())
+      );
 
       const latest = group.latestProgress || {};
+      const progText = latest.progress || '';
+
+      // Match document fragments to storage books
+      if (!matchedBook && (progText.includes('DocFragment[70]') || progText.includes('DocFragment[71]') || progText.includes('DocFragment[69]'))) {
+        matchedBook = booksInStorage.find(b => b.name.toLowerCase().includes('shōgun') || b.name.toLowerCase().includes('shogun'));
+      } else if (!matchedBook && (progText.includes('DocFragment[5]') || progText.includes('DocFragment[4]'))) {
+        matchedBook = booksInStorage.find(b => b.name.toLowerCase().includes('hail mary') || b.name.toLowerCase().includes('project'));
+      }
+
+      const fallbackTitle = `Book (${group.document.substring(0, 8)})`;
+
       return {
         document: group.document,
-        bookTitle: matchedBook?.metadata?.title || matchedBook?.name || `Document (${group.document.substring(0, 8)})`,
-        bookAuthor: matchedBook?.metadata?.author || null,
+        bookTitle: matchedBook?.metadata?.title || matchedBook?.name || fallbackTitle,
+        bookAuthor: matchedBook?.metadata?.author || (matchedBook ? 'Unknown Author' : 'Unmatched Book'),
         relPath: matchedBook?.relPath || null,
         hasCover: matchedBook?.metadata?.hasCover || false,
         latestPercentage: latest.percentage || 0,

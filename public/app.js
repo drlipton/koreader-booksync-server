@@ -390,7 +390,7 @@ async function submitRename() {
   }
 }
 
-// Kosync Reading Progress Summary
+// Kosync Reading Progress Summary (Grouped BY BOOK)
 async function loadKosyncSummary() {
   try {
     const res = await fetch('/api/kosync/summary');
@@ -399,25 +399,55 @@ async function loadKosyncSummary() {
     document.getElementById('stat-syncs').textContent = data.totalSyncedBooks || 0;
     const container = document.getElementById('kosync-list');
 
-    if (!data.recentSyncs || data.recentSyncs.length === 0) {
+    if (!data.books || data.books.length === 0) {
       container.innerHTML = `<div class="empty-sync">No active progress sync records yet. Connect KOReader to start syncing!</div>`;
       return;
     }
 
     container.innerHTML = '';
-    data.recentSyncs.forEach(sync => {
-      const div = document.createElement('div');
-      div.className = 'sync-item';
-      const percent = Math.round((sync.percentage || 0) * 100);
+    data.books.forEach(book => {
+      const card = document.createElement('div');
+      card.className = 'book-sync-card';
+      const percent = Math.round((book.latestPercentage || 0) * 100);
 
-      div.innerHTML = `
-        <div class="sync-device">${escapeHtml(sync.device)} (${escapeHtml(sync.user)})</div>
+      let coverHtml = '';
+      if (book.hasCover && book.relPath) {
+        coverHtml = `<img src="/api/cover?path=${encodeURIComponent(book.relPath)}" class="sync-book-cover" alt="Cover">`;
+      } else {
+        coverHtml = `<div class="sync-book-icon">📖</div>`;
+      }
+
+      const devicesHtml = book.devices.map(d => {
+        const devPercent = Math.round((d.percentage || 0) * 100);
+        return `
+          <div class="device-pill">
+            <span class="device-name">📱 ${escapeHtml(d.device)}</span>
+            <span class="device-user">(${escapeHtml(d.user)})</span>
+            <span class="device-percent">${devPercent}%</span>
+          </div>
+        `;
+      }).join('');
+
+      card.innerHTML = `
+        <div class="sync-book-header">
+          ${coverHtml}
+          <div class="sync-book-info">
+            <div class="sync-book-title">${escapeHtml(book.bookTitle)}</div>
+            <div class="sync-book-author">${escapeHtml(book.bookAuthor || 'KOReader Sync')}</div>
+          </div>
+          <div class="sync-book-badge">${percent}% Read</div>
+        </div>
+
         <div class="sync-progress-bar">
           <div class="sync-progress-fill" style="width: ${percent}%"></div>
         </div>
-        <div class="sync-info">${percent}% • ${escapeHtml(sync.progress || 'Page')}</div>
+
+        <div class="sync-devices-list">
+          <span class="devices-label">Synced Devices:</span>
+          ${devicesHtml}
+        </div>
       `;
-      container.appendChild(div);
+      container.appendChild(card);
     });
   } catch (e) {}
 }

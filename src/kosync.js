@@ -1,7 +1,9 @@
 const fs = require('fs');
 const path = require('path');
+const { parseEpub } = require('./epub-helper');
 
 const DB_FILE = path.join(__dirname, '..', 'data', 'kosync.json');
+const BOOKS_DIR = path.join(__dirname, '..', 'data', 'books');
 
 function loadData() {
   try {
@@ -22,6 +24,43 @@ function saveData(data) {
   } catch (e) {
     console.error('Error saving Kosync DB:', e);
   }
+}
+
+// Find all books in data/books directory recursively
+function getAllBookFiles(dirPath, fileList = []) {
+  try {
+    const files = fs.readdirSync(dirPath);
+    for (const file of files) {
+      if (file.startsWith('.')) continue;
+      const fullPath = path.join(dirPath, file);
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        getAllBookFiles(fullPath, fileList);
+      } else {
+        const ext = path.extname(file).toLowerCase();
+        if (['.epub', '.pdf', '.mobi', '.azw3', '.cbz', '.cbr', '.txt', '.fb2'].includes(ext)) {
+          const relPath = path.relative(BOOKS_DIR, fullPath).replace(/\\/g, '/');
+          let metadata = null;
+          if (ext === '.epub') {
+            const parsed = parseEpub(fullPath);
+            metadata = {
+              title: parsed.title || null,
+              author: parsed.author || null,
+              hasCover: !!parsed.coverBuffer
+            };
+          }
+          fileList.push({
+            name: file,
+            relPath,
+            ext,
+            size: stat.size,
+            metadata
+          });
+        }
+      }
+    }
+  } catch (e) {}
+  return fileList;
 }
 
 function handleKosyncRoutes(app) {
@@ -94,70 +133,93 @@ function handleKosyncRoutes(app) {
     });
   });
 
-  // Get Progress for Document (Smart Cross-Device Sync Matcher)
+  // Get Progress for Document (STRICT BOOK-SPECIFIC MATCHING)
   app.get('/syncs/progress/:document', (req, res) => {
     const username = req.headers['x-auth-user'] || req.query?.username || req.body?.username || 'joel';
     const reqDocHash = req.params.document;
 
     const data = loadData();
-    const userSyncs = data.syncs[username] || {};
-    const exactRecord = userSyncs[reqDocHash];
 
-    let newestUserRecord = null;
-    let newestUserTimestamp = 0;
+    // 1. Check specified username's exact document hash match
+    let record = (data.syncs[username] || {})[reqDocHash];
 
-    // Find newest progress record for this user across all document hashes
-    Object.keys(userSyncs).forEach(hash => {
-      const rec = userSyncs[hash];
-      if ((rec.timestamp || 0) > newestUserTimestamp) {
-        newestUserTimestamp = rec.timestamp || 0;
-        newestUserRecord = rec;
-      }
-    });
-
-    let bestRecord = null;
-
-    if (newestUserRecord) {
-      const exactTime = exactRecord ? (exactRecord.timestamp || 0) : 0;
-      // If another device pushed newer progress for this user, use the newest progress
-      if (newestUserTimestamp >= exactTime) {
-        bestRecord = { ...newestUserRecord, document: reqDocHash };
-      } else {
-        bestRecord = { ...exactRecord, document: reqDocHash };
-      }
-    } else {
-      // Global fallback search across all users
+    // 2. Fallback: Search across other users for the EXACT same document hash
+    if (!record) {
       for (const u of Object.keys(data.syncs)) {
-        for (const h of Object.keys(data.syncs[u])) {
-          const rec = data.syncs[u][h];
-          if (!bestRecord || (rec.timestamp || 0) > (bestRecord.timestamp || 0)) {
-            bestRecord = { ...rec, document: reqDocHash };
-          }
+        if (data.syncs[u] && data.syncs[u][reqDocHash]) {
+          record = data.syncs[u][reqDocHash];
+          break;
         }
       }
     }
 
-    if (!bestRecord) {
+    // If no progress found for this SPECIFIC document, return 404 (Book hasn't been synced yet)
+    if (!record) {
       return res.status(404).json({ message: 'No progress found for document' });
     }
 
-    return res.status(200).json(bestRecord);
+    return res.status(200).json(record);
   });
 
-  // API route for Web UI to view Kosync activity
+  // API route for Web UI to view Kosync activity grouped BY BOOK
   app.get('/api/kosync/summary', (req, res) => {
     const data = loadData();
-    const allRecords = [];
+    const booksInStorage = getAllBookFiles(BOOKS_DIR);
+    const docGroupMap = {};
+
     Object.keys(data.syncs).forEach(user => {
-      Object.keys(data.syncs[user]).forEach(doc => {
-        allRecords.push({ user, ...data.syncs[user][doc] });
+      Object.keys(data.syncs[user]).forEach(docHash => {
+        const rec = data.syncs[user][docHash];
+        if (!docGroupMap[docHash]) {
+          docGroupMap[docHash] = {
+            document: docHash,
+            devices: [],
+            latestTimestamp: 0,
+            latestProgress: null
+          };
+        }
+
+        docGroupMap[docHash].devices.push({ user, ...rec });
+
+        if ((rec.timestamp || 0) > docGroupMap[docHash].latestTimestamp) {
+          docGroupMap[docHash].latestTimestamp = rec.timestamp || 0;
+          docGroupMap[docHash].latestProgress = rec;
+        }
       });
     });
-    allRecords.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+    const bookSyncList = Object.values(docGroupMap).map(group => {
+      // Try to match book in storage
+      let matchedBook = null;
+
+      // Check if any stored book name matches or partial matches
+      if (booksInStorage.length === 1) {
+        matchedBook = booksInStorage[0];
+      } else if (booksInStorage.length > 0) {
+        matchedBook = booksInStorage.find(b => b.relPath.includes(group.document)) || booksInStorage[0];
+      }
+
+      const latest = group.latestProgress || {};
+      return {
+        document: group.document,
+        bookTitle: matchedBook?.metadata?.title || matchedBook?.name || `Document (${group.document.substring(0, 8)})`,
+        bookAuthor: matchedBook?.metadata?.author || null,
+        relPath: matchedBook?.relPath || null,
+        hasCover: matchedBook?.metadata?.hasCover || false,
+        latestPercentage: latest.percentage || 0,
+        latestProgressText: latest.progress || '',
+        updatedAt: latest.updatedAt || new Date().toISOString(),
+        timestamp: latest.timestamp || 0,
+        devices: group.devices.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+      };
+    });
+
+    bookSyncList.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
     res.json({
       totalUsers: Object.keys(data.users).length,
-      totalSyncedBooks: allRecords.length,
-      recentSyncs: allRecords.slice(0, 10)
+      totalSyncedBooks: bookSyncList.length,
+      books: bookSyncList
     });
   });
 }

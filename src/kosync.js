@@ -93,6 +93,26 @@ function getAllBookFiles(dirPath, fileList = []) {
   return fileList;
 }
 
+// Resolve matching book for a given document record
+function resolveBookForRecord(docHash, progText, booksInStorage) {
+  let matchedBook = booksInStorage.find(b =>
+    b.hashes.fullMd5 === docHash ||
+    b.hashes.partMd5 === docHash ||
+    b.hashes.pathMd5 === docHash ||
+    b.relPath.toLowerCase().includes(docHash.toLowerCase())
+  );
+
+  const prog = progText || '';
+
+  if (!matchedBook && (prog.includes('DocFragment[70]') || prog.includes('DocFragment[71]') || prog.includes('DocFragment[69]'))) {
+    matchedBook = booksInStorage.find(b => b.name.toLowerCase().includes('shōgun') || b.name.toLowerCase().includes('shogun'));
+  } else if (!matchedBook && (prog.includes('DocFragment[5]') || prog.includes('DocFragment[4]'))) {
+    matchedBook = booksInStorage.find(b => b.name.toLowerCase().includes('hail mary') || b.name.toLowerCase().includes('project'));
+  }
+
+  return matchedBook;
+}
+
 function handleKosyncRoutes(app) {
   // Healthcheck
   app.get(['/healthcheck', '/users/healthcheck'], (req, res) => res.status(200).send('OK'));
@@ -163,92 +183,107 @@ function handleKosyncRoutes(app) {
     });
   });
 
-  // Get Progress for Document (STRICT BOOK-SPECIFIC MATCHING)
+  // Get Progress for Document (BOOK-LEVEL ALIAS SYNC MATCHING)
   app.get('/syncs/progress/:document', (req, res) => {
     const username = req.headers['x-auth-user'] || req.query?.username || req.body?.username || 'joel';
     const reqDocHash = req.params.document;
 
     const data = loadData();
+    const booksInStorage = getAllBookFiles(BOOKS_DIR);
 
-    // 1. Check specified username's exact document hash match
-    let record = (data.syncs[username] || {})[reqDocHash];
-
-    // 2. Fallback: Search across other users for the EXACT same document hash
-    if (!record) {
+    // 1. Check exact document hash first
+    let exactRecord = (data.syncs[username] || {})[reqDocHash];
+    if (!exactRecord) {
       for (const u of Object.keys(data.syncs)) {
         if (data.syncs[u] && data.syncs[u][reqDocHash]) {
-          record = data.syncs[u][reqDocHash];
+          exactRecord = data.syncs[u][reqDocHash];
           break;
         }
       }
     }
 
-    // If no progress found for this SPECIFIC document, return 404 (Book hasn't been synced yet)
-    if (!record) {
+    // 2. Identify which book this hash belongs to
+    const targetBook = resolveBookForRecord(reqDocHash, exactRecord?.progress, booksInStorage);
+
+    // 3. Find newest progress across ALL hashes that map to the SAME book!
+    let bestRecord = exactRecord;
+    let newestTime = exactRecord ? (exactRecord.timestamp || 0) : 0;
+
+    Object.keys(data.syncs).forEach(user => {
+      Object.keys(data.syncs[user]).forEach(dHash => {
+        const rec = data.syncs[user][dHash];
+        const matched = resolveBookForRecord(dHash, rec.progress, booksInStorage);
+
+        if (targetBook && matched && matched.relPath === targetBook.relPath) {
+          if ((rec.timestamp || 0) > newestTime) {
+            newestTime = rec.timestamp || 0;
+            bestRecord = { ...rec, document: reqDocHash };
+          }
+        }
+      });
+    });
+
+    if (!bestRecord) {
       return res.status(404).json({ message: 'No progress found for document' });
     }
 
-    return res.status(200).json(record);
+    return res.status(200).json(bestRecord);
   });
 
-  // API route for Web UI to view Kosync activity grouped BY BOOK
+  // API route for Web UI to view Kosync activity MERGED BY BOOK
   app.get('/api/kosync/summary', (req, res) => {
     const data = loadData();
     const booksInStorage = getAllBookFiles(BOOKS_DIR);
-    const docGroupMap = {};
+    const bookTitleGroupMap = {};
 
     Object.keys(data.syncs).forEach(user => {
       Object.keys(data.syncs[user]).forEach(docHash => {
         const rec = data.syncs[user][docHash];
-        if (!docGroupMap[docHash]) {
-          docGroupMap[docHash] = {
-            document: docHash,
-            devices: [],
+        const matchedBook = resolveBookForRecord(docHash, rec.progress, booksInStorage);
+
+        const bookTitleKey = matchedBook?.metadata?.title || matchedBook?.name || `Book (${docHash.substring(0, 8)})`;
+
+        if (!bookTitleGroupMap[bookTitleKey]) {
+          bookTitleGroupMap[bookTitleKey] = {
+            bookTitle: bookTitleKey,
+            bookAuthor: matchedBook?.metadata?.author || (matchedBook ? 'Unknown Author' : 'Unmatched Book'),
+            relPath: matchedBook?.relPath || null,
+            hasCover: matchedBook?.metadata?.hasCover || false,
+            devicesMap: {},
             latestTimestamp: 0,
             latestProgress: null
           };
         }
 
-        docGroupMap[docHash].devices.push({ user, ...rec });
+        // Deduplicate devices by device_id or user+device
+        const devKey = `${user}:${rec.device_id || rec.device}`;
+        const existingDev = bookTitleGroupMap[bookTitleKey].devicesMap[devKey];
 
-        if ((rec.timestamp || 0) > docGroupMap[docHash].latestTimestamp) {
-          docGroupMap[docHash].latestTimestamp = rec.timestamp || 0;
-          docGroupMap[docHash].latestProgress = rec;
+        if (!existingDev || (rec.timestamp || 0) > (existingDev.timestamp || 0)) {
+          bookTitleGroupMap[bookTitleKey].devicesMap[devKey] = { user, ...rec };
+        }
+
+        if ((rec.timestamp || 0) > bookTitleGroupMap[bookTitleKey].latestTimestamp) {
+          bookTitleGroupMap[bookTitleKey].latestTimestamp = rec.timestamp || 0;
+          bookTitleGroupMap[bookTitleKey].latestProgress = rec;
         }
       });
     });
 
-    const bookSyncList = Object.values(docGroupMap).map(group => {
-      let matchedBook = booksInStorage.find(b =>
-        b.hashes.fullMd5 === group.document ||
-        b.hashes.partMd5 === group.document ||
-        b.hashes.pathMd5 === group.document ||
-        b.relPath.toLowerCase().includes(group.document.toLowerCase())
-      );
-
+    const bookSyncList = Object.values(bookTitleGroupMap).map(group => {
       const latest = group.latestProgress || {};
-      const progText = latest.progress || '';
-
-      // Match document fragments to storage books
-      if (!matchedBook && (progText.includes('DocFragment[70]') || progText.includes('DocFragment[71]') || progText.includes('DocFragment[69]'))) {
-        matchedBook = booksInStorage.find(b => b.name.toLowerCase().includes('shōgun') || b.name.toLowerCase().includes('shogun'));
-      } else if (!matchedBook && (progText.includes('DocFragment[5]') || progText.includes('DocFragment[4]'))) {
-        matchedBook = booksInStorage.find(b => b.name.toLowerCase().includes('hail mary') || b.name.toLowerCase().includes('project'));
-      }
-
-      const fallbackTitle = `Book (${group.document.substring(0, 8)})`;
+      const devices = Object.values(group.devicesMap).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
       return {
-        document: group.document,
-        bookTitle: matchedBook?.metadata?.title || matchedBook?.name || fallbackTitle,
-        bookAuthor: matchedBook?.metadata?.author || (matchedBook ? 'Unknown Author' : 'Unmatched Book'),
-        relPath: matchedBook?.relPath || null,
-        hasCover: matchedBook?.metadata?.hasCover || false,
+        bookTitle: group.bookTitle,
+        bookAuthor: group.bookAuthor,
+        relPath: group.relPath,
+        hasCover: group.hasCover,
         latestPercentage: latest.percentage || 0,
         latestProgressText: latest.progress || '',
         updatedAt: latest.updatedAt || new Date().toISOString(),
-        timestamp: latest.timestamp || 0,
-        devices: group.devices.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+        timestamp: group.latestTimestamp,
+        devices
       };
     });
 

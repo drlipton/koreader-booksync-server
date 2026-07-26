@@ -183,7 +183,7 @@ function handleKosyncRoutes(app) {
     });
   });
 
-  // Get Progress for Document (BOOK-LEVEL ALIAS SYNC MATCHING)
+  // Get Progress for Document (SMART MULTI-DEVICE & NEW DEVICE FALLBACK)
   app.get('/syncs/progress/:document', (req, res) => {
     const username = req.headers['x-auth-user'] || req.query?.username || req.body?.username || 'joel';
     const reqDocHash = req.params.document;
@@ -202,26 +202,57 @@ function handleKosyncRoutes(app) {
       }
     }
 
-    // 2. Identify which book this hash belongs to
+    // 2. Identify target book
     const targetBook = resolveBookForRecord(reqDocHash, exactRecord?.progress, booksInStorage);
 
-    // 3. Find newest progress across ALL hashes that map to the SAME book!
     let bestRecord = exactRecord;
     let newestTime = exactRecord ? (exactRecord.timestamp || 0) : 0;
 
+    // 3. Search for matching progress across hashes that belong to the SAME book
     Object.keys(data.syncs).forEach(user => {
       Object.keys(data.syncs[user]).forEach(dHash => {
         const rec = data.syncs[user][dHash];
         const matched = resolveBookForRecord(dHash, rec.progress, booksInStorage);
 
-        if (targetBook && matched && matched.relPath === targetBook.relPath) {
-          if ((rec.timestamp || 0) > newestTime) {
+        if (targetBook && matched && (matched.relPath === targetBook.relPath || matched.name === targetBook.name)) {
+          if ((rec.timestamp || 0) >= newestTime) {
             newestTime = rec.timestamp || 0;
             bestRecord = { ...rec, document: reqDocHash };
           }
         }
       });
     });
+
+    // 4. New Device / Unknown Hash Fallback (e.g. Xteink opening OPDS download for 1st time):
+    if (!bestRecord) {
+      let newestUserRecord = null;
+      let newestUserTime = 0;
+
+      const userSyncMap = data.syncs[username] || {};
+      Object.keys(userSyncMap).forEach(dHash => {
+        const rec = userSyncMap[dHash];
+        if ((rec.timestamp || 0) > newestUserTime) {
+          newestUserTime = rec.timestamp || 0;
+          newestUserRecord = rec;
+        }
+      });
+
+      if (!newestUserRecord) {
+        Object.keys(data.syncs).forEach(u => {
+          Object.keys(data.syncs[u]).forEach(dHash => {
+            const rec = data.syncs[u][dHash];
+            if ((rec.timestamp || 0) > newestUserTime) {
+              newestUserTime = rec.timestamp || 0;
+              newestUserRecord = rec;
+            }
+          });
+        });
+      }
+
+      if (newestUserRecord) {
+        bestRecord = { ...newestUserRecord, document: reqDocHash };
+      }
+    }
 
     if (!bestRecord) {
       return res.status(404).json({ message: 'No progress found for document' });
@@ -255,7 +286,6 @@ function handleKosyncRoutes(app) {
           };
         }
 
-        // Deduplicate devices by device_id or user+device
         const devKey = `${user}:${rec.device_id || rec.device}`;
         const existingDev = bookTitleGroupMap[bookTitleKey].devicesMap[devKey];
 
